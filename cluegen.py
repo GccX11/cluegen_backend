@@ -2,8 +2,9 @@ import os
 import pickle
 import tqdm
 import numpy as np
-from scipy.cluster.hierarchy import dendrogram, linkage
+from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import pdist
+from nltk.stem.porter import PorterStemmer
 
 
 class _Leaf(object):
@@ -45,10 +46,18 @@ class ClueGenerator(object):
         self.all_clue_words = np.load(os.path.join(path, 'all_clue_words.npy'))
         self.all_clue_vectors = np.load(os.path.join(path, 'all_clue_vectors.npy'))
 
+        # TODO: precompute this
+        print('stemming clue words')
+        self.stemmer = PorterStemmer()
+        self.all_stemmed_words = np.array([self.stemmer.stem(word) for word in self.all_clue_words])
+
         print('ClueGenerator initialized')
 
     def glove(self, word):
         return self.glove_vectors[self.glove_dict[word]]
+    
+    def stem(self, word):
+        return self.stemmer.stem(word.lower())
 
     # create a proper tree structure,
     # where each node has the average distance of its children
@@ -112,16 +121,22 @@ class ClueGenerator(object):
     def get_clue(self, cluster_words, other_words, num_clues=3):
         cluster_words = set(w.lower() for w in cluster_words)
         other_words = set(w.lower() for w in other_words)
+        cluster_stems = set(self.stem(w) for w in cluster_words)
+        other_stems = set(self.stem(w) for w in other_words)
 
         vectors = np.array([self.glove(word.lower()) for word in cluster_words])
 
         dists = self.all_clue_vectors @ vectors.T
         dists = 1 - dists / (np.expand_dims(np.linalg.norm(vectors, axis=1),0) * np.expand_dims(np.linalg.norm(self.all_clue_vectors, axis=1), 1))
         best_dists = np.sum(dists, axis=1) # - np.sum(your_dists, axis=1)
-        clue_idxs = np.argsort(best_dists)[:num_clues+len(cluster_words)+len(other_words)]
-        clues = list(self.all_clue_words[clue_idxs])
+        clue_idxs = np.argsort(best_dists)[:num_clues+len(cluster_words)+len(other_words)+2*num_clues]
+        clues = self.all_clue_words[clue_idxs]
         # filter out words that are already in the cluster
-        clues = [clue for clue in clues if self.no_word_overlap(clue, cluster_words) and self.no_word_overlap(clue, other_words)]
+        clue_idxs = [i for i in range(len(clues)) if self.no_word_overlap(self.stem(clues[i]), cluster_stems) and self.no_word_overlap(self.stem(clues[i]), other_words)]
+        # filter out overlapping clues # TODO: fix this
+        #clue_idxs = [i for i in range(len(clues)) if self.no_word_overlap(self.stem(clues[i]), [self.stem(clues[j]) for j in range(len(clues)) if j != i])]
+        clues = list(clues[clue_idxs])
+        dists = list(dists[clue_idxs])
         return clues[:num_clues]
 
     def generate(self, words):
@@ -129,19 +144,18 @@ class ClueGenerator(object):
         # cluster the words
         clusters = self.cluster_words(words)
         clusters_words = []
-        print('getting clusters')
-        for cluster in tqdm.tqdm(clusters):
+        for cluster in clusters:
             cluster_words = cluster.get_lemmas()
             clusters_words.append(cluster_words)
         print('got', len(clusters_words), 'clusters')
 
         # get clues for each cluster
         clues_words = []
-        print('getting clues')
-        for cluster_words in tqdm.tqdm(clusters_words):
+        for cluster_words in clusters_words:
             other_words = [w for w in words if w not in cluster_words]
             clues_words.append(self.get_clue(cluster_words, other_words))
         print('got', len(clues_words), 'clues')
+        print('----------------')
 
         return clusters_words, clues_words
 
