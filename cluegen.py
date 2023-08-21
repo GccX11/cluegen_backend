@@ -118,31 +118,39 @@ class ClueGenerator(object):
         # or is not a substring of any of the words, and vice versa
         return (word not in words) and (not any([word in w for w in words]) and (not any([w in word for w in words])))
 
-    def get_clue(self, cluster_words, other_words, num_clues=3):
+    def get_clues(self, cluster_words, other_words, num_clues=3):
         cluster_words = set(w.lower() for w in cluster_words)
         other_words = set(w.lower() for w in other_words)
         cluster_stems = set(self.stem(w) for w in cluster_words)
         other_stems = set(self.stem(w) for w in other_words)
 
+        # get the distances between the cluster words and all the clue words
         vectors = np.array([self.glove(word.lower()) for word in cluster_words])
-
         dists = self.all_clue_vectors @ vectors.T
         dists = 1 - dists / (np.expand_dims(np.linalg.norm(vectors, axis=1),0) * np.expand_dims(np.linalg.norm(self.all_clue_vectors, axis=1), 1))
-        best_dists = np.sum(dists, axis=1) # - np.sum(your_dists, axis=1)
+        
+        # get the distances between the cluster words and all the other words
+        # TODO: this approach doesn't work, but it is still worth considering in future
+        #other_vectors = np.array([self.glove(word.lower()) for word in other_words])
+        #other_dists = self.all_clue_vectors @ other_vectors.T
+        #other_dists = 1 - other_dists / (np.expand_dims(np.linalg.norm(other_vectors, axis=1),0) * np.expand_dims(np.linalg.norm(self.all_clue_vectors, axis=1), 1))
+        
+        # take the sum, we don't need to make it a mean
+        best_dists = np.sum(dists, axis=1) #- np.sum(other_dists, axis=1)
         clue_idxs = np.argsort(best_dists)[:num_clues+len(cluster_words)+len(other_words)+2*num_clues]
         clues = self.all_clue_words[clue_idxs]
         # filter out words that are already in the cluster
-        clue_idxs = [i for i in range(len(clues)) if self.no_word_overlap(self.stem(clues[i]), cluster_stems) and self.no_word_overlap(self.stem(clues[i]), other_words)]
+        clue_idxs = [i for i in range(len(clues)) if self.no_word_overlap(self.stem(clues[i]), cluster_stems) and self.no_word_overlap(self.stem(clues[i]), other_stems)]
         # filter out overlapping clues # TODO: fix this
-        #clue_idxs = [i for i in range(len(clues)) if self.no_word_overlap(self.stem(clues[i]), [self.stem(clues[j]) for j in range(len(clues)) if j != i])]
+        #clue_idxs = [i for i in range(len(clues[clue_idxs])) if self.no_word_overlap(self.stem(clues[clue_idxs][i]), [self.stem(clues[clue_idxs][j]) for j in range(len(clues[clue_idxs])) if j != i])]
         clues = list(clues[clue_idxs])
-        dists = list(dists[clue_idxs])
+        best_dists = list(best_dists[clue_idxs])
         return clues[:num_clues]
 
-    def generate(self, words):
+    def generate(self, words, max_cluster_size=5, num_clues=3):
         print('got', len(words), 'words')
         # cluster the words
-        clusters = self.cluster_words(words)
+        clusters = self.cluster_words(words, max_cluster_size=max_cluster_size)
         clusters_words = []
         for cluster in clusters:
             cluster_words = cluster.get_lemmas()
@@ -153,7 +161,7 @@ class ClueGenerator(object):
         clues_words = []
         for cluster_words in clusters_words:
             other_words = [w for w in words if w not in cluster_words]
-            clues_words.append(self.get_clue(cluster_words, other_words))
+            clues_words.append(self.get_clues(cluster_words, other_words, num_clues=num_clues))
         print('got', len(clues_words), 'clues')
         print('----------------')
 
