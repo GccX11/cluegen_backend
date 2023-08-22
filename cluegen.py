@@ -1,7 +1,6 @@
 import os
 import numpy as np
 from projects.cluegen_backend.glove_db import Glove
-from peewee import *
 from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import pdist
 from nltk.stem.porter import PorterStemmer
