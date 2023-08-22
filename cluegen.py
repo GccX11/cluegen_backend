@@ -138,12 +138,22 @@ class ClueGenerator(object):
         best_dists = np.sum(dists, axis=1) #- np.sum(other_dists, axis=1)
         clue_idxs = np.argsort(best_dists)[:num_clues+len(cluster_words)+len(other_words)+2*num_clues]
         clues = self.all_clue_words[clue_idxs]
+        
         # filter out words that are already in the cluster
         clue_idxs = [i for i in range(len(clues)) if self.no_word_overlap(self.stem(clues[i]), cluster_stems) and self.no_word_overlap(self.stem(clues[i]), other_stems)]
-        # filter out overlapping clues # TODO: fix this
-        #clue_idxs = [i for i in range(len(clues[clue_idxs])) if self.no_word_overlap(self.stem(clues[clue_idxs][i]), [self.stem(clues[clue_idxs][j]) for j in range(len(clues[clue_idxs])) if j != i])]
-        clues = list(clues[clue_idxs])
-        best_dists = list(best_dists[clue_idxs])
+        
+        # filter out overlapping clues
+        words_stems = set()
+        filtered_clue_idxs = []
+        for clue_idx in clue_idxs:
+            word_stem = self.stem(clues[clue_idx])
+            if word_stem in words_stems:
+                continue
+            words_stems.add(word_stem)
+            filtered_clue_idxs.append(clue_idx)
+
+        clues = list(clues[filtered_clue_idxs])
+        best_dists = list(best_dists[filtered_clue_idxs])
         return clues[:num_clues]
 
     def generate(self, words, max_cluster_size=5, num_clues=3):
