@@ -1,7 +1,7 @@
 import os
-import pickle
-import tqdm
 import numpy as np
+from projects.cluegen_backend.glove_db import Glove
+from peewee import *
 from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import pdist
 from nltk.stem.porter import PorterStemmer
@@ -37,16 +37,16 @@ class _Cluster(object):
 
 class ClueGenerator(object):
     def __init__(self, path):
-        with open(os.path.join(path, 'glove_dict.pkl'), 'rb') as f:
-            self.glove_dict = pickle.load(f)
-        self.glove_vectors = np.load(os.path.join(path, 'glove_vectors.npy'))
+        # load the glove database
+        self.glove_db = Glove(path)
 
         # words originally from https://github.com/first20hours/google-10000-english
         # with additional filtering by me
         self.all_clue_words = np.load(os.path.join(path, 'all_clue_words.npy'))
         self.all_clue_vectors = np.load(os.path.join(path, 'all_clue_vectors.npy'))
 
-        # TODO: precompute this
+        # TODO: consider precomputing this
+        #       (but memory may be too much and this is fast)
         print('stemming clue words')
         self.stemmer = PorterStemmer()
         self.all_stemmed_words = np.array([self.stemmer.stem(word) for word in self.all_clue_words])
@@ -54,7 +54,7 @@ class ClueGenerator(object):
         print('ClueGenerator initialized')
 
     def glove(self, word):
-        return self.glove_vectors[self.glove_dict[word]]
+        return self.glove_db.vector(word)
     
     def stem(self, word):
         return self.stemmer.stem(word.lower())
