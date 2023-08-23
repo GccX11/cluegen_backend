@@ -9,8 +9,11 @@ class Glove(object):
     def vector(self, word):
         with sqlite3.connect(os.path.join(self.path, 'glove.db')) as con:
             cur = con.cursor()
-            vector_str = cur.execute("SELECT vector FROM word WHERE string=?", (word,)).fetchone()[0]
-            return np.array(vector_str.split(','), dtype=np.float32)
+            vector_str = cur.execute("SELECT vector FROM word WHERE string=?", (word,)).fetchone()
+            if vector_str is not None:
+                return np.array(vector_str[0].split(','), dtype=np.float32)
+            else:
+                return None
 
 
 

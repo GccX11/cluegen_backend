@@ -158,6 +158,13 @@ class ClueGenerator(object):
 
     def generate(self, words, max_cluster_size=5, num_clues=3):
         print('got', len(words), 'words')
+
+        # filter out words that don't have a vector
+        words = [word for word in words if self.glove(word.lower()) is not None]
+        print('got', len(words), 'words with vectors')
+        if len(words) == 0:
+            return [], []
+
         # cluster the words
         clusters = self.cluster_words(words, max_cluster_size=max_cluster_size)
         clusters_words = []
