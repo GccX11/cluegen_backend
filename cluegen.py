@@ -88,22 +88,17 @@ class ClueGenerator(object):
             clusters[1 + i + len(pairs)] = cluster
         return clusters
 
-    def cosine_similarity(self, x, y):
-        return np.dot(x, y) / (np.linalg.norm(x) * np.linalg.norm(y))
-
     def cluster_words(self, words, max_cluster_size=5):
         # use the wordA.similarity(wordB) metric
         # to get a similarity matrix
-        similarity_matrix = np.zeros((len(words), len(words)))
-        # TODO: vectorize this
-        for i in range(len(words)):
-            vector_i = self.glove(words[i].lower())
-            for j in range(len(words)):
-                vector_j = self.glove(words[j].lower())
-                similarity_matrix[i, j] = self.cosine_similarity(vector_i, vector_j)
+        vectors = np.array([self.glove(word.lower()) for word in words])
+        similarity_matrix = vectors @ vectors.T
+        vectors_normed_a = np.sqrt(np.sum(vectors**2, axis=1))
+        vectors_normed_b = np.sqrt(np.sum(vectors**2, axis=1))
+        similarity_matrix = 1 - similarity_matrix / (vectors_normed_a * vectors_normed_b)
         condensed_similarity_matrix = pdist(similarity_matrix)
         # use the similarity matrix to cluster the words
-        Z = linkage(condensed_similarity_matrix, 'ward')
+        Z = linkage(condensed_similarity_matrix, 'average')
 
         clusters = self.convert_to_tree(Z, words)
 
@@ -126,7 +121,9 @@ class ClueGenerator(object):
         # get the distances between the cluster words and all the clue words
         vectors = np.array([self.glove(word.lower()) for word in cluster_words])
         dists = self.all_clue_vectors @ vectors.T
-        dists = 1 - dists / (np.expand_dims(np.linalg.norm(vectors, axis=1),0) * np.expand_dims(np.linalg.norm(self.all_clue_vectors, axis=1), 1))
+        vectors_normed = np.sqrt(np.sum(vectors**2, axis=1))
+        all_clue_vectors_normed = np.sqrt(np.sum(self.all_clue_vectors**2, axis=1))
+        dists = 1 - dists / (np.expand_dims(vectors_normed, 0) * np.expand_dims(all_clue_vectors_normed, 1))
         
         # get the distances between the cluster words and all the other words
         # TODO: this approach doesn't work, but it is still worth considering in future
@@ -134,8 +131,7 @@ class ClueGenerator(object):
         #other_dists = self.all_clue_vectors @ other_vectors.T
         #other_dists = 1 - other_dists / (np.expand_dims(np.linalg.norm(other_vectors, axis=1),0) * np.expand_dims(np.linalg.norm(self.all_clue_vectors, axis=1), 1))
         
-        # take the sum, we don't need to make it a mean
-        best_dists = np.sum(dists, axis=1) #- np.sum(other_dists, axis=1)
+        best_dists = np.mean(dists, axis=1) #- np.sum(other_dists, axis=1)
         clue_idxs = np.argsort(best_dists)[:num_clues+len(cluster_words)+len(other_words)+2*num_clues]
         clues = self.all_clue_words[clue_idxs]
         
